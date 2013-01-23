@@ -10,6 +10,8 @@ This plugins provides the following monitoring services
 * gets current connections count
 * gets list of locks
 * gets logfile settings
+* if the server is a master, the number of connected slaves
+* if the server is a slave, its replication lag in seconds behind its master
 
 h2. Installation
 
