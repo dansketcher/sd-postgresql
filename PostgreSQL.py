@@ -3,7 +3,7 @@
 import re
 import commands
 
-PLUGIN_NAME = 'PostgreSQL Plugin'
+PLUGIN_NAME = 'PostgreSQL with Replication'
 CONFIG_PARAMS = [
     # ('config key', 'name', 'required'),
     ('postgres_database', 'PostgreSQLDatabase', True),
@@ -18,6 +18,8 @@ PLUGIN_STATS = [
     'postgresCurrentConnections',
     'postgresLocks',
     'postgresLogFile',
+    'postgresConnectedSlaves',
+    'postgresSlaveLag',
 ]
 
 #===============================================================================
@@ -46,7 +48,7 @@ class PostgreSQL:
         # make sure we have the necessary config params
         for key, name, required in CONFIG_PARAMS:
             if required and not self.agent_config.get(name, False):
-                self.checks_logger.debug(
+                self.checks_logger.error(
                     '%s: config not complete (missing: %s) under PostgreSQL' % (
                         PLUGIN_NAME,
                         key
@@ -132,13 +134,47 @@ class PostgreSQL:
                 '%s: SQL query error when checking log file settings: %s' % (PLUGIN_NAME, e)
             )
 
+        # get number of connected slaves, if we are a master
+        try:
+            cursor = db.cursor()
+            cursor.execute(
+                "SELECT COUNT(pid) AS slave_count FROM pg_stat_replication;"
+            )
+            self.postgresConnectedSlaves = cursor.fetchone()[0]
+        except psycopg2.OperationalError, e:
+            self.checks_logger.error(
+                '%s: SQL query error when getting connected slaves: %s' % (PLUGIN_NAME, e)
+            )
+
+        # get slave lag, if we are a slave
+        try:
+            cursor = db.cursor()
+            cursor.execute(
+                "SELECT EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp()))::INTEGER AS lag_seconds;"
+            )
+            self.postgresSlaveLag = cursor.fetchone()[0]
+        except psycopg2.OperationalError, e:
+            self.checks_logger.error(
+                '%s: SQL query error when getting slave lag: %s' % (PLUGIN_NAME, e)
+            )
+
         # return the stats
         stats = {}
         for param in PLUGIN_STATS:
             stats[param] = getattr(self, param, None)
         return stats
 
-    
 if __name__ == "__main__":
-    postgres = PostgreSQL(None, None, None)
+    # If you want to test this, update your config settings below
+    import logging
+    raw_config = {
+        'PostgreSQL': {
+            'postgres_database': 'template1',
+            'postgres_user': 'postgres',
+            'postgres_pass': '',
+            'postgres_host': 'localhost',
+            'postgres_port': '5432'
+        }
+    }
+    postgres = PostgreSQL({}, logging.getLogger(''), raw_config)
     print postgres.run()
