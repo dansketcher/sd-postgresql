@@ -149,8 +149,17 @@ class PostgreSQL:
         # get slave lag, if we are a slave
         try:
             cursor = db.cursor()
+            # Used to be the following query
+            # "SELECT EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp()))::INTEGER AS lag_seconds;"
+            # but on servers that do not update regularly, the response can be misleading
             cursor.execute(
-                "SELECT EXTRACT(EPOCH FROM (now() - pg_last_xact_replay_timestamp()))::INTEGER AS lag_seconds;"
+                """
+                SELECT
+                CASE WHEN pg_last_xlog_receive_location() = pg_last_xlog_replay_location()
+                THEN 0
+                ELSE EXTRACT (EPOCH FROM now() - pg_last_xact_replay_timestamp())::INTEGER
+                END AS log_delay;
+                """
             )
             self.postgresSlaveLag = cursor.fetchone()[0]
         except psycopg2.OperationalError, e:
