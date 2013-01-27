@@ -8,7 +8,7 @@ CONFIG_PARAMS = [
     # ('config key', 'name', 'required'),
     ('postgres_database', 'PostgreSQLDatabase', True),
     ('postgres_user', 'PostgreSQLUser', True),
-    ('postgres_pass', 'PostgreSQLPassword', True),
+    ('postgres_pass', 'PostgreSQLPassword', False),
     ('postgres_host', 'PostgreSQLHost', True),
     ('postgres_port', 'PostgreSQLPort', False),
 ]
@@ -16,6 +16,7 @@ PLUGIN_STATS = [
     'postgresVersion',
     'postgresMaxConnections',
     'postgresCurrentConnections',
+    'postgresConnectionsPercent',
     'postgresLocks',
     'postgresLogFile',
     'postgresConnectedSlaves',
@@ -96,7 +97,7 @@ class PostgreSQL:
         try:
             cursor = db.cursor()
             cursor.execute(
-                "SELECT setting AS mc FROM pg_settings WHERE name = 'max_connections'"
+                "SELECT setting::INTEGER AS mc FROM pg_settings WHERE name = 'max_connections'"
             )
             self.postgresMaxConnections = cursor.fetchone()[0]
         except psycopg2.OperationalError, e:
@@ -111,6 +112,9 @@ class PostgreSQL:
             self.checks_logger.error(
                 '%s: SQL query error when getting current connections: %s' % (PLUGIN_NAME, e)
             )
+
+        if self.postgresMaxConnections and self.postgresCurrentConnections:
+            self.postgresConnectionsPercent = (float(self.postgresCurrentConnections) / self.postgresMaxConnections) * 100
 
         # get locks
         try:
